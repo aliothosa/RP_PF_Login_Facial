@@ -1,6 +1,26 @@
-/capturas_rostro
-/dist
-/venv
-__pycache__
-/build
-/data
+# --- Datos biométricos y artefactos (privacidad) ---
+/data/
+/dataset/
+/capturas/
+/capturas_rostro/
+/models/
+/reports/
+/logs/
+
+# --- Build / empaquetado ---
+/build/
+/dist/
+*.spec
+
+# --- Entornos virtuales ---
+/venv/
+.venv/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Entorno ---
+.env

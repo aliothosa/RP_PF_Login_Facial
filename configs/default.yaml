@@ -1,0 +1,47 @@
+camera:
+  index: 0
+  duration_seconds: 5.0
+  width: 1280
+  height: 720
+  flip_horizontal: true
+
+face_detection:
+  method: "haar"
+  haar_cascade: "haarcascade_frontalface_default.xml"
+  scale_factor: 1.1
+  min_neighbors: 6
+  min_size: [100, 100]
+  margin_pixels: 30
+
+preprocessing:
+  target_size: [224, 224]
+  color_format: "RGB"
+  normalize_pixels: true
+
+model:
+  backbone: "MobileNetV2"
+  input_shape: [224, 224, 3]
+  classes:
+    - "elioth"
+    - "emmanuel"
+  model_path: "models/face_auth_model.keras"
+
+decision:
+  min_valid_frames: 30
+  confidence_threshold: 0.80
+  margin_threshold: 0.25
+  fallback_user: "guest"
+
+output:
+  zip_faces_folder: "faces"
+  zip_annotated_folder: "frames_anotados"
+
+session_dispatch:
+  mode: "dry-run"
+  users:
+    elioth:
+      command: "echo start elioth"
+    emmanuel:
+      command: "echo start emmanuel"
+    guest:
+      command: "echo start guest"
