@@ -94,9 +94,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_prep = subparsers.add_parser(
         "prepare-dataset", help="Genera dataset procesado (train/val/test) desde rostros crudos."
     )
-    p_prep.add_argument("--raw-dir", default="data/faces", help="Directorio de rostros crudos")
-    p_prep.add_argument("--processed-dir", default="data/processed", help="Directorio de salida")
-    p_prep.set_defaults(func=_placeholder("prepare-dataset"))
+    p_prep.add_argument("--raw-dir", default="data/faces", help="Directorio de imágenes por clase")
+    p_prep.add_argument("--output-dir", default="data/processed", help="Directorio de salida")
+    p_prep.add_argument("--train-ratio", type=float, default=0.70, help="Proporción de entrenamiento")
+    p_prep.add_argument("--val-ratio", type=float, default=0.15, help="Proporción de validación")
+    p_prep.add_argument("--test-ratio", type=float, default=0.15, help="Proporción de prueba")
+    p_prep.add_argument("--seed", type=int, default=42, help="Semilla para reproducibilidad")
+    p_prep.set_defaults(func=_run_prepare_dataset)
 
     # train
     p_train = subparsers.add_parser("train", help="Entrena el clasificador (transfer learning).")
@@ -169,6 +173,30 @@ def _run_capture(args: argparse.Namespace) -> int:
         )
     except RuntimeError as exc:
         print(f"[rp_face_login] Error de captura: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _run_prepare_dataset(args: argparse.Namespace) -> int:
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    # Import diferido: evita requerir OpenCV para '--help' u otros comandos.
+    from .training.dataset_loader import prepare_dataset
+
+    try:
+        prepare_dataset(
+            raw_dir=args.raw_dir,
+            output_dir=args.output_dir,
+            config=cfg,
+            ratios=(args.train_ratio, args.val_ratio, args.test_ratio),
+            seed=args.seed,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[rp_face_login] Error al preparar dataset: {exc}", file=sys.stderr)
         return 1
     return 0
 
