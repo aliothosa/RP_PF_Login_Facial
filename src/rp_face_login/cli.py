@@ -3,11 +3,11 @@
 Ejecutable desde la raíz del proyecto con::
 
     python -m rp_face_login.cli --help
+    python -m rp_face_login.cli capture --name elioth --output-dir ./capturas --duration 5
 
-Las opciones globales ``--config``, ``--camera-index``, ``--duration`` y
-``--output-dir`` permiten sobrescribir la configuración cargada desde
-``configs/default.yaml``. En esta fase los subcomandos son *placeholders* con
-sus argumentos definidos pero sin lógica de captura/entrenamiento/inferencia.
+Las opciones ``--camera-index``, ``--duration`` y ``--output-dir`` sobrescriben
+la configuración cargada desde ``configs/default.yaml`` y pueden indicarse
+después del subcomando. ``--config`` es global (antes del subcomando).
 """
 
 from __future__ import annotations
@@ -42,7 +42,26 @@ def _overrides_from_args(args: argparse.Namespace) -> CLIOverrides:
     )
 
 
+def _load(args: argparse.Namespace):
+    """Carga la configuración aplicando overrides; imprime y sale si es inválida."""
+    return load_config(args.config, overrides=_overrides_from_args(args))
+
+
 def _build_parser() -> argparse.ArgumentParser:
+    # Parser padre con los overrides; default=SUPPRESS evita pisar el valor
+    # global cuando el flag no se usa tras el subcomando.
+    overrides = argparse.ArgumentParser(add_help=False)
+    overrides.add_argument(
+        "--camera-index", type=int, default=argparse.SUPPRESS, help="Override de camera.index"
+    )
+    overrides.add_argument(
+        "--duration", type=float, default=argparse.SUPPRESS,
+        help="Override de camera.duration_seconds (segundos)",
+    )
+    overrides.add_argument(
+        "--output-dir", default=argparse.SUPPRESS, help="Override de output.output_dir"
+    )
+
     parser = argparse.ArgumentParser(
         prog="rp_face_login",
         description=(
@@ -51,41 +70,27 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--version", action="version", version=f"rp_face_login {__version__}")
-
-    # Opciones globales de configuración / override (anteriores al subcomando).
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Ruta al archivo YAML de configuración (default: configs/default.yaml)",
-    )
-    parser.add_argument(
-        "--camera-index",
-        type=int,
-        default=None,
-        help="Override de camera.index",
-    )
-    parser.add_argument(
-        "--duration",
-        type=float,
-        default=None,
-        help="Override de camera.duration_seconds (segundos)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=None,
-        help="Override de output.output_dir",
     )
 
     subparsers = parser.add_subparsers(dest="command", metavar="<comando>")
 
     # capture: adquisición temporal de login (reemplaza faceIdentifierNoView.py)
     p_capture = subparsers.add_parser(
-        "capture", help="Captura temporal de rostros para login (sin vista previa)."
+        "capture", parents=[overrides],
+        help="Captura temporal de rostros para login (sin vista previa).",
     )
     p_capture.add_argument("--name", default="usuario", help="Etiqueta del usuario")
-    p_capture.set_defaults(func=_placeholder("capture"))
+    p_capture.add_argument(
+        "--debug-annotated", action="store_true",
+        help="Incluye frames anotados dentro del ZIP (depuración).",
+    )
+    p_capture.set_defaults(func=_run_capture)
 
-    # prepare-dataset: rostros crudos -> dataset procesado (reemplaza face_extractor.py)
+    # prepare-dataset
     p_prep = subparsers.add_parser(
         "prepare-dataset", help="Genera dataset procesado (train/val/test) desde rostros crudos."
     )
@@ -112,12 +117,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_pred.set_defaults(func=_placeholder("predict-zip"))
 
     # login-sim
-    p_login = subparsers.add_parser("login-sim", help="Login simulado completo (sin sesión real).")
+    p_login = subparsers.add_parser(
+        "login-sim", parents=[overrides], help="Login simulado completo (sin sesión real)."
+    )
     p_login.add_argument("--model", default="models/face_auth_model.keras", help="Modelo a usar")
     p_login.set_defaults(func=_placeholder("login-sim"))
 
-    # check-config: valida la carga de configuración y muestra valores efectivos
-    p_check = subparsers.add_parser("check-config", help="Valida el YAML de configuración (con overrides).")
+    # check-config
+    p_check = subparsers.add_parser(
+        "check-config", parents=[overrides],
+        help="Valida el YAML de configuración (con overrides).",
+    )
     p_check.set_defaults(func=_run_check_config)
 
     return parser
@@ -125,7 +135,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _run_check_config(args: argparse.Namespace) -> int:
     try:
-        cfg = load_config(args.config, overrides=_overrides_from_args(args))
+        cfg = _load(args)
     except ConfigError as exc:
         print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
         return 1
@@ -135,6 +145,31 @@ def _run_check_config(args: argparse.Namespace) -> int:
     print(f"  índice de cámara  : {cfg.camera.index}")
     print(f"  duración cámara   : {cfg.camera.duration_seconds}s")
     print(f"  directorio salida : {cfg.output.output_dir}")
+    return 0
+
+
+def _run_capture(args: argparse.Namespace) -> int:
+    try:
+        cfg = _load(args)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    # Import diferido: evita requerir OpenCV para '--help' u otros comandos.
+    from .acquisition.camera_capture import capture_to_zip
+
+    try:
+        capture_to_zip(
+            cfg,
+            name=args.name,
+            output_dir=cfg.output.output_dir,
+            duration=cfg.camera.duration_seconds,
+            camera_index=cfg.camera.index,
+            debug_annotated=args.debug_annotated,
+        )
+    except RuntimeError as exc:
+        print(f"[rp_face_login] Error de captura: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -47,7 +47,7 @@ def test_check_config_applies_overrides(capsys, tmp_path):
         ),
         encoding="utf-8",
     )
-    code = main(["--config", str(cfg), "--camera-index", "3", "--duration", "9", "check-config"])
+    code = main(["--config", str(cfg), "check-config", "--camera-index", "3", "--duration", "9"])
     assert code == 0
     out = capsys.readouterr().out
     assert "índice de cámara  : 3" in out
