@@ -128,9 +128,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # predict-zip
     p_pred = subparsers.add_parser("predict-zip", help="Inferencia por frame desde un ZIP de login.")
-    p_pred.add_argument("--zip", required=False, help="Ruta del ZIP de login")
+    p_pred.add_argument("--zip", required=True, help="Ruta del ZIP de login")
     p_pred.add_argument("--model", default="models/face_auth_model.keras", help="Modelo a usar")
-    p_pred.set_defaults(func=_placeholder("predict-zip"))
+    p_pred.add_argument("--class-indices", default=None, help="Ruta a class_indices.json (opcional)")
+    p_pred.add_argument("--batch-size", type=int, default=32, help="Tamaño de batch")
+    p_pred.add_argument(
+        "--save-json", default=None, metavar="RUTA",
+        help="Guarda las predicciones en la ruta indicada (p. ej. reports/predictions.json)",
+    )
+    p_pred.set_defaults(func=_run_predict_zip)
 
     # login-sim
     p_login = subparsers.add_parser(
@@ -275,6 +281,37 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         return 1
     except (FileNotFoundError, ValueError) as exc:
         print(f"[rp_face_login] Error de evaluación: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _run_predict_zip(args: argparse.Namespace) -> int:
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        from .inference.batch_predictor import predict_zip
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        predict_zip(
+            zip_path=args.zip,
+            model_path=args.model,
+            config=cfg,
+            class_indices_path=args.class_indices,
+            batch_size=args.batch_size,
+            save_json=args.save_json,
+        )
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[rp_face_login] Error de inferencia: {exc}", file=sys.stderr)
         return 1
     return 0
 
