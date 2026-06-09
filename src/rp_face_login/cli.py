@@ -143,7 +143,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "login-sim", parents=[overrides], help="Login simulado completo (sin sesión real)."
     )
     p_login.add_argument("--model", default="models/face_auth_model.keras", help="Modelo a usar")
-    p_login.set_defaults(func=_placeholder("login-sim"))
+    p_login.add_argument("--name", default="login", help="Etiqueta de la captura temporal")
+    p_login.add_argument("--class-indices", default=None, help="Ruta a class_indices.json (opcional)")
+    p_login.add_argument(
+        "--debug-annotated", action="store_true",
+        help="Incluye frames anotados en el ZIP temporal.",
+    )
+    p_login.add_argument(
+        "--save-decision", default=None, metavar="RUTA",
+        help="Guarda la decisión en la ruta indicada (p. ej. reports/decision.json)",
+    )
+    p_login.set_defaults(func=_run_login_sim)
 
     # check-config
     p_check = subparsers.add_parser(
@@ -312,6 +322,37 @@ def _run_predict_zip(args: argparse.Namespace) -> int:
         return 1
     except (FileNotFoundError, ValueError) as exc:
         print(f"[rp_face_login] Error de inferencia: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _run_login_sim(args: argparse.Namespace) -> int:
+    try:
+        cfg = _load(args)  # aplica overrides (output-dir, duration, camera-index)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        from .login_sim import run_login_sim
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        run_login_sim(
+            cfg,
+            name=args.name,
+            model_path=args.model,
+            class_indices_path=args.class_indices,
+            debug_annotated=args.debug_annotated,
+            save_decision=args.save_decision,
+        )
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"[rp_face_login] Error en login-sim: {exc}", file=sys.stderr)
         return 1
     return 0
 
