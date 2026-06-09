@@ -31,11 +31,13 @@ LOG_DIR="$REPO_ROOT/logs"
 LOG_FILE="$LOG_DIR/face-login.log"
 mkdir -p "$LOG_DIR"
 
-# Selección de intérprete: usa el venv del proyecto si existe.
-if [[ -x "$REPO_ROOT/venv/bin/python" ]]; then
-    PY="$REPO_ROOT/venv/bin/python"
+# Intérprete: preferir uv (entorno del proyecto).
+if command -v uv >/dev/null 2>&1; then
+    RUN_PY=(uv run python)
+    PY_DESC="uv run python"
 else
-    PY="python3"
+    RUN_PY=(python3)
+    PY_DESC="python3"
 fi
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -48,21 +50,21 @@ log() {
 }
 
 log "=== face-login-greeter (EXPERIMENTAL: no toca /etc, no inicia KDE real) ==="
-log "python=$PY config=$CONFIG model=$MODEL dispatch_mode=${DISPATCH_MODE:-<config>}"
+log "python=$PY_DESC config=$CONFIG model=$MODEL dispatch_mode=${DISPATCH_MODE:-<config>}"
 
 DECISION_JSON="$(mktemp -t face-login-decision-XXXXXX.json)"
 trap 'rm -f "$DECISION_JSON"' EXIT
 
 # 1) Ejecutar login-sim y guardar la decisión.
 log "Paso 1/3: ejecutando login-sim..."
-if ! "$PY" -m rp_face_login.cli --config "$CONFIG" login-sim \
+if ! "${RUN_PY[@]}" -m rp_face_login.cli --config "$CONFIG" login-sim \
         --model "$MODEL" --save-decision "$DECISION_JSON" "$@" >>"$LOG_FILE" 2>&1; then
     log "ERROR: login-sim falló. Revisa $LOG_FILE (¿cámara / modelo / TensorFlow?)."
     exit 1
 fi
 
 # 2) Extraer selected_user del JSON de decisión.
-SELECTED_USER="$("$PY" - "$DECISION_JSON" <<'PY'
+SELECTED_USER="$("${RUN_PY[@]}" - "$DECISION_JSON" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     decision = json.load(fh)
@@ -73,7 +75,7 @@ log "Paso 2/3: selected_user = ${SELECTED_USER}"
 
 # 3) Despachar la sesión mediante el dispatcher (sin iniciar sesión real).
 log "Paso 3/3: despachando sesión (dry-run/command, sin login real)..."
-if ! "$PY" - "$CONFIG" "$SELECTED_USER" "$DISPATCH_MODE" <<'PY' >>"$LOG_FILE" 2>&1; then
+if ! "${RUN_PY[@]}" - "$CONFIG" "$SELECTED_USER" "$DISPATCH_MODE" <<'PY' >>"$LOG_FILE" 2>&1; then
 import sys
 from rp_face_login.config import load_config
 from rp_face_login.session.dispatcher import SessionDispatcher

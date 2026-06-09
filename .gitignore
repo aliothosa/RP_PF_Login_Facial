@@ -1,20 +1,27 @@
 # --- Datos biométricos y artefactos (privacidad) ---
 /data/
 /dataset/
+dataset/
 /capturas/
 /capturas_rostro/
 /models/
+models/
 /reports/
+reports/
 /logs/
+logs/
 
 # --- Build / empaquetado ---
+build/
+dist/
 /build/
 /dist/
 *.spec
 
-# --- Entornos virtuales ---
+# --- Entornos virtuales (uv / pip) ---
 /venv/
 .venv/
+.venv*/
 
 # --- Python ---
 __pycache__/

@@ -11,6 +11,7 @@ opción más simple y mantenible para este alcance, sin dependencias extra.
 from __future__ import annotations
 
 import dataclasses
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,16 @@ REQUIRED_SECTIONS = (
     "output",
 )
 
-DEFAULT_CONFIG_PATH = Path("configs/default.yaml")
+def default_config_path() -> Path:
+    """Ruta al YAML por defecto; en binarios PyInstaller usa el bundle embebido."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        bundled = Path(sys._MEIPASS) / "configs" / "default.yaml"  # type: ignore[attr-defined]
+        if bundled.exists():
+            return bundled
+    return Path("configs/default.yaml")
+
+
+DEFAULT_CONFIG_PATH = default_config_path()
 
 
 class ConfigError(RuntimeError):

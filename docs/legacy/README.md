@@ -18,6 +18,6 @@ No deben ejecutarse como parte del flujo final.
 - Generación de ZIP + `metadata.csv` (de `faceIdentifierView.py`).
 - Extracción por video con `--every-n-frames` y ventana temporal (de `face_extractor.py`).
 
-> Nota: `faceIdentifierNoView.spec` (en la raíz) aún apunta a la ruta antigua del
-> script y a una ruta absoluta del entorno. Se regenerará de forma reproducible
-> con `scripts/build_pyinstaller.sh` en la fase de empaquetado.
+> Nota: el empaquetado PyInstaller se genera con `scripts/build_pyinstaller.sh`
+> (sin `.spec` versionado). El antiguo `faceIdentifierNoView.spec` con rutas
+> absolutas fue eliminado.

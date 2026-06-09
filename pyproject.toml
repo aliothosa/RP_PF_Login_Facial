@@ -7,7 +7,7 @@ name = "rp_face_login"
 version = "0.1.0"
 description = "Autenticación/identificación facial 1:N para login en KDE Plasma (RP_PF_Login_Facial)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
     { name = "aliothosa" },
