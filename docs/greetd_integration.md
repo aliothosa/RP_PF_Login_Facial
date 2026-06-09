@@ -224,16 +224,11 @@ para que **PAM** complete la autenticación.
   error.
 
 ### Recomendación para este proyecto
-1. **Ahora (académico):** mantener el `SessionDispatcher` desacoplado en
-   `dry-run`/`command`. Es seguro, testeable y demuestra la arquitectura sin
-   tocar el SO.
-2. **Siguiente paso real:** preferir la **Opción C** (greeter que usa el
-   `greetd-ipc` para que PAM autentique) sobre ejecutar comandos crudos, porque
-   delega la creación de sesión en el canal oficial y conserva PAM.
-3. **Objetivo "production-grade":** mover el factor facial a un **módulo PAM**
-   (Opción A) para cumplir plenamente la separación de §7, asumiendo y mitigando
-   los problemas conocidos de Howdy+greetd (probar en VM, mantener fallback a
-   contraseña, no usarlo como único factor).
+1. **Desarrollo local:** `dry-run` / `command` (seguro, sin greetd).
+2. **VM con Plasma:** modo **`greetd-ipc`** (implementado en `session/greetd_ipc.py`):
+   reconocimiento facial → username → PAM → `startplasma-wayland`.
+3. **Objetivo production-grade:** módulo PAM facial (Opción A) como factor
+   `auth sufficient`, manteniendo fallback a contraseña.
 
 En todos los casos se mantiene la regla de oro: **el reconocimiento facial
 aporta identidad; PAM autentica.**

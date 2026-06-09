@@ -8,6 +8,7 @@ from rp_face_login.config import load_config
 from rp_face_login.session.dispatcher import (
     MODE_COMMAND,
     MODE_DRY_RUN,
+    MODE_GREETD_IPC,
     SessionDispatcher,
 )
 
@@ -63,3 +64,46 @@ def test_command_mode_reports_nonzero_returncode():
     result = dispatcher.dispatch("guest")
     assert result.executed is True
     assert result.returncode == 3
+
+
+def test_greetd_ipc_mode_uses_client(monkeypatch, tmp_path):
+    calls: list[tuple] = []
+
+    class FakeClient:
+        def __init__(self, socket_env="GREETD_SOCK"):
+            calls.append(("init", socket_env))
+
+        def launch_session(self, username, cmd, env, password_callback):
+            calls.append(("launch", username, list(cmd), list(env)))
+
+    monkeypatch.setattr(
+        "rp_face_login.session.dispatcher.GreetdIpcClient",
+        FakeClient,
+    )
+    monkeypatch.setattr(
+        "rp_face_login.session.dispatcher.default_password_callback",
+        lambda **kwargs: (lambda *_: ""),
+    )
+
+    dispatcher = SessionDispatcher(
+        mode=MODE_GREETD_IPC,
+        commands={"elioth": "/usr/bin/startplasma-wayland"},
+        greetd_extra_env=["XDG_SESSION_TYPE=wayland"],
+    )
+    result = dispatcher.dispatch("elioth")
+    assert result.executed is True
+    assert result.returncode == 0
+    assert calls[0] == ("init", "GREETD_SOCK")
+    assert calls[1][0] == "launch"
+    assert calls[1][1] == "elioth"
+
+
+def test_with_mode_preserves_greetd_settings():
+    dispatcher = SessionDispatcher(
+        mode=MODE_GREETD_IPC,
+        commands={"elioth": "echo x"},
+        greetd_prompt_password=True,
+    )
+    overridden = dispatcher.with_mode(MODE_DRY_RUN)
+    assert overridden.mode == MODE_DRY_RUN
+    assert overridden.greetd_prompt_password is True

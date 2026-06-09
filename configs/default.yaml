@@ -38,6 +38,11 @@ output:
 
 session_dispatch:
   mode: "dry-run"
+  # greetd-ipc (L3): descomenta y ajusta tras instalar en VM
+  # greetd_ipc:
+  #   default_cmd: ["/usr/bin/startplasma-wayland"]
+  #   password_env: FACE_LOGIN_PAM_PASSWORD
+  #   prompt_password: true
   users:
     elioth:
       command: "echo start elioth"

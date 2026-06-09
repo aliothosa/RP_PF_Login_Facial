@@ -1,0 +1,67 @@
+# Ejemplo de configuración para despliegue en VM (EndeavourOS + greetd).
+# Copia a /opt/rp_face_login/configs/default.yaml tras revisar rutas y umbrales.
+#
+# Modo L3 (greetd-ipc): abre Plasma vía PAM tras reconocimiento facial.
+# PAM sigue pidiendo contraseña salvo que configures un módulo facial (Howdy)
+# o una pila PAM de prueba en la VM (ver docs/deploy_endeavouros_vm.md §11.6).
+
+camera:
+  index: 0
+  duration_seconds: 5.0
+  width: 1280
+  height: 720
+  flip_horizontal: true
+
+face_detection:
+  method: "haar"
+  haar_cascade: "haarcascade_frontalface_default.xml"
+  scale_factor: 1.1
+  min_neighbors: 6
+  min_size: [100, 100]
+  margin_pixels: 30
+
+preprocessing:
+  target_size: [224, 224]
+  color_format: "RGB"
+  normalize_pixels: true
+
+model:
+  backbone: "MobileNetV2"
+  input_shape: [224, 224, 3]
+  classes:
+    - "elioth"
+    - "emmanuel"
+  model_path: "/opt/rp_face_login/models/face_auth_model.keras"
+
+decision:
+  min_valid_frames: 30
+  confidence_threshold: 0.80
+  margin_threshold: 0.25
+  fallback_user: "guest"
+
+output:
+  zip_faces_folder: "faces"
+  zip_annotated_folder: "frames_anotados"
+  output_dir: "/opt/rp_face_login/capturas"
+
+session_dispatch:
+  # L1: dry-run | L2: command (echo) | L3: greetd-ipc (Plasma vía PAM)
+  mode: "greetd-ipc"
+  greetd_ipc:
+    socket_env: "GREETD_SOCK"
+    default_cmd: ["/usr/bin/startplasma-wayland"]
+    # Contraseña PAM: env (VM) o prompt en /dev/tty si cage tiene TTY
+    password_env: "FACE_LOGIN_PAM_PASSWORD"
+    prompt_password: true
+    env: []
+  users:
+    elioth:
+      command: "/usr/bin/startplasma-wayland"
+    emmanuel:
+      command: "/usr/bin/startplasma-wayland"
+    guest:
+      command: "echo start guest"
+
+# Referencia sesiones Plasma:
+# plasma_session: "/usr/bin/startplasma-wayland"
+# desktop: /usr/share/wayland-sessions/plasma.desktop
