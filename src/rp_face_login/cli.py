@@ -121,7 +121,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval = subparsers.add_parser("evaluate", help="Evalúa el modelo sobre el set de test.")
     p_eval.add_argument("--dataset-dir", default="data/processed/test", help="Set de test")
     p_eval.add_argument("--model", default="models/face_auth_model.keras", help="Modelo a evaluar")
-    p_eval.set_defaults(func=_placeholder("evaluate"))
+    p_eval.add_argument("--class-indices", default=None, help="Ruta a class_indices.json (opcional)")
+    p_eval.add_argument("--reports-dir", default="reports", help="Directorio de salida de reportes")
+    p_eval.add_argument("--batch-size", type=int, default=32, help="Tamaño de batch")
+    p_eval.set_defaults(func=_run_evaluate)
 
     # predict-zip
     p_pred = subparsers.add_parser("predict-zip", help="Inferencia por frame desde un ZIP de login.")
@@ -241,6 +244,37 @@ def _run_train(args: argparse.Namespace) -> int:
         return 1
     except (FileNotFoundError, ValueError) as exc:
         print(f"[rp_face_login] Error de entrenamiento: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _run_evaluate(args: argparse.Namespace) -> int:
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        from .training.evaluate_model import evaluate
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        evaluate(
+            model_path=args.model,
+            dataset_dir=args.dataset_dir,
+            config=cfg,
+            class_indices_path=args.class_indices,
+            reports_dir=args.reports_dir,
+            batch_size=args.batch_size,
+        )
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[rp_face_login] Error de evaluación: {exc}", file=sys.stderr)
         return 1
     return 0
 
