@@ -106,7 +106,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_train = subparsers.add_parser("train", help="Entrena el clasificador (transfer learning).")
     p_train.add_argument("--dataset-dir", default="data/processed", help="Dataset procesado")
     p_train.add_argument("--output", default="models/face_auth_model.keras", help="Modelo de salida")
-    p_train.set_defaults(func=_placeholder("train"))
+    p_train.add_argument("--epochs", type=int, default=10, help="Número de épocas")
+    p_train.add_argument("--batch-size", type=int, default=32, help="Tamaño de batch")
+    p_train.add_argument("--learning-rate", type=float, default=1e-3, help="Tasa de aprendizaje")
+    p_train.add_argument("--dropout", type=float, default=0.3, help="Dropout de la cabeza")
+    p_train.add_argument("--seed", type=int, default=42, help="Semilla")
+    p_train.add_argument(
+        "--backbone", default=None,
+        help="Backbone (MobileNetV2 | EfficientNetB0); por defecto, el de config.",
+    )
+    p_train.set_defaults(func=_run_train)
 
     # evaluate
     p_eval = subparsers.add_parser("evaluate", help="Evalúa el modelo sobre el set de test.")
@@ -197,6 +206,41 @@ def _run_prepare_dataset(args: argparse.Namespace) -> int:
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"[rp_face_login] Error al preparar dataset: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _run_train(args: argparse.Namespace) -> int:
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"[rp_face_login] Configuración inválida: {exc}", file=sys.stderr)
+        return 1
+
+    # Import diferido: TensorFlow es pesado y opcional (extra [ml]).
+    try:
+        from .training.train_model import train
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        train(
+            dataset_dir=args.dataset_dir,
+            output_path=args.output,
+            config=cfg,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            dropout=args.dropout,
+            seed=args.seed,
+            backbone=args.backbone,
+        )
+    except ImportError as exc:
+        print(f"[rp_face_login] {exc}", file=sys.stderr)
+        return 1
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[rp_face_login] Error de entrenamiento: {exc}", file=sys.stderr)
         return 1
     return 0
 
