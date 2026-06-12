@@ -1,0 +1,70 @@
+% Compilar desde docs/:
+%   pdflatex parte1_standalone.tex
+%   pdflatex parte1_standalone.tex   (segunda pasada para referencias)
+%
+% Requiere: pdflatex + texlive-basic (+ texlive-langspanish en Arch si falla babel).
+%
+% Babel 4.x (TeX Live 2025+): ya no se usa \usepackage[spanish]{babel}.
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{babel}
+\babelprovide[main, import]{spanish}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
+
+\usepackage{listings}
+
+% Ruta a assets (compilar desde docs/)
+\newcommand{\assetroot}{../assets}
+
+\lstdefinestyle{json}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{gray!40},
+  backgroundcolor=\color{gray!4},
+  showstringspaces=false,
+  literate=
+    *{:}{{{\color{blue}:}}}{1}
+     {,}{{{\color{blue},}}}{1}
+     {\{}{{{\color{orange}\{}}}{1}
+     {\}}{{{\color{orange}\}}}}{1}
+     {[}{{{\color{orange}[}}}{1}
+     {]}{{{\color{orange}]}}}{1},
+}
+\lstdefinestyle{plaintext}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=false,
+  frame=single,
+  rulecolor=\color{gray!40},
+  backgroundcolor=\color{gray!4},
+  showstringspaces=false,
+}
+
+\title{Parte 1 --- Reconocimiento facial para inicio de sesión\\\large RP\_PF\_Login\_Facial}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\input{parte1_reconocimiento_facial.tex}
+
+\end{document}

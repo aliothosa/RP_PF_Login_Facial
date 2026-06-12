@@ -1,0 +1,16 @@
+{
+  "selected_user": "guest",
+  "accepted": false,
+  "reason": "insufficient_frames",
+  "valid_frames": 22,
+  "best_user": "elioth",
+  "best_score": 0.996796502308412,
+  "second_user": "emmanuel",
+  "second_score": 0.0032034812828979657,
+  "margin": 0.9935930210255141,
+  "thresholds": {
+    "min_valid_frames": 30,
+    "confidence_threshold": 0.8,
+    "margin_threshold": 0.25
+  }
+}

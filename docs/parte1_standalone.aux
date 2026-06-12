@@ -1,0 +1,66 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\babel@aux{spanish}{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Parte 1 - Reconocimiento facial para inicio de sesión}{2}{section.1}\protected@file@percent }
+\newlabel{sec:parte1-facial}{{1}{2}{Parte 1 - Reconocimiento facial para inicio de sesión}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Visión general}{2}{subsection.1.1}\protected@file@percent }
+\newlabel{subsec:vision-general}{{1.1}{2}{Visión general}{subsection.1.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Arquitectura general: entrenamiento offline e inferencia temporal en login.}}{2}{figure.caption.2}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:arquitectura-general}{{1}{2}{Arquitectura general: entrenamiento offline e inferencia temporal en login}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Estructura del proyecto y datos}{2}{subsection.1.2}\protected@file@percent }
+\newlabel{subsec:estructura}{{1.2}{2}{Estructura del proyecto y datos}{subsection.1.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Módulos del pipeline facial.}}{2}{table.caption.3}\protected@file@percent }
+\newlabel{tab:modulos}{{1}{2}{Módulos del pipeline facial}{table.caption.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Adquisición y preprocesamiento visual}{2}{subsection.1.3}\protected@file@percent }
+\newlabel{subsec:adquisicion}{{1.3}{2}{Adquisición y preprocesamiento visual}{subsection.1.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.1}Captura temporal}{2}{subsubsection.1.3.1}\protected@file@percent }
+\newlabel{lst:data-structure}{{1}{3}{Estructura de \texttt {data/}}{lstlisting.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}{\ignorespaces Estructura de \texttt  {data/}.}}{3}{lstlisting.1}\protected@file@percent }
+\newlabel{lst:models-structure}{{2}{3}{Artefactos en \texttt {models/}}{lstlisting.2}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2}{\ignorespaces Artefactos en \texttt  {models/}.}}{3}{lstlisting.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Ejemplo de rostro extraído y recortado ($224 \times 224$) para entrenamiento o inferencia.}}{3}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:face-example}{{2}{3}{Ejemplo de rostro extraído y recortado ($224 \times 224$) para entrenamiento o inferencia}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.2}Detección Haar}{4}{subsubsection.1.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.3}Preprocesamiento}{4}{subsubsection.1.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Entrenamiento del clasificador}{4}{subsection.1.4}\protected@file@percent }
+\newlabel{subsec:entrenamiento}{{1.4}{4}{Entrenamiento del clasificador}{subsection.1.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.1}Partición del dataset}{4}{subsubsection.1.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.4.2}Arquitectura por transfer learning}{4}{subsubsection.1.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Arquitectura del clasificador facial.}}{4}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:red}{{3}{4}{Arquitectura del clasificador facial}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.5}Evaluación offline}{4}{subsection.1.5}\protected@file@percent }
+\newlabel{subsec:evaluacion}{{1.5}{4}{Evaluación offline}{subsection.1.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Matriz de confusión en el conjunto de test ($N = 337$ muestras: 175 \texttt  {elioth}, 162 \texttt  {emmanuel}). No se observan confusiones entre clases.}}{5}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:confusion}{{4}{5}{Matriz de confusión en el conjunto de test ($N = 337$ muestras: 175 \texttt {elioth}, 162 \texttt {emmanuel}). No se observan confusiones entre clases}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.6}Inferencia temporal y política de decisión}{5}{subsection.1.6}\protected@file@percent }
+\newlabel{subsec:inferencia}{{1.6}{5}{Inferencia temporal y política de decisión}{subsection.1.6}{}}
+\newlabel{eq:temporal-avg}{{1}{5}{Inferencia temporal y política de decisión}{equation.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Umbrales por defecto (\texttt  {configs/default.yaml}).}}{5}{table.caption.8}\protected@file@percent }
+\newlabel{tab:umbrales}{{2}{5}{Umbrales por defecto (\texttt {configs/default.yaml})}{table.caption.8}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.6.1}Demostración: login simulado}{5}{subsubsection.1.6.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Salida de \texttt  {login-sim}: rechazo a \texttt  {guest} pese a alta confianza en \texttt  {elioth} (\texttt  {reason = insufficient\_frames}).}}{6}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:login-sim}{{5}{6}{Salida de \texttt {login-sim}: rechazo a \texttt {guest} pese a alta confianza en \texttt {elioth} (\texttt {reason = insufficient\_frames})}{figure.caption.9}{}}
+\newlabel{lst:decision}{{3}{7}{Decisión de login (\texttt {decision\_example.json})}{lstlisting.3}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3}{\ignorespaces Decisión de login (\texttt  {decision\_example.json}).}}{7}{lstlisting.3}\protected@file@percent }
+\newlabel{lst:predictions}{{4}{7}{Primeras predicciones por frame (\texttt {predictions\_example.json})}{lstlisting.4}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4}{\ignorespaces Primeras predicciones por frame (\texttt  {predictions\_example.json}).}}{7}{lstlisting.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Diagrama de la política de decisión (las tres condiciones deben cumplirse).}}{7}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:decision-flow}{{6}{7}{Diagrama de la política de decisión (las tres condiciones deben cumplirse)}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.7}Integración con el entorno de escritorio}{7}{subsection.1.7}\protected@file@percent }
+\newlabel{subsec:integracion}{{1.7}{7}{Integración con el entorno de escritorio}{subsection.1.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Log de \texttt  {face-login-greeter} en VM: configuración, modelo y \texttt  {dispatch\_mode=greetd-ipc}.}}{8}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:greetd}{{7}{8}{Log de \texttt {face-login-greeter} en VM: configuración, modelo y \texttt {dispatch\_mode=greetd-ipc}}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.8}Implementación, pruebas y despliegue}{8}{subsection.1.8}\protected@file@percent }
+\newlabel{subsec:implementacion}{{1.8}{8}{Implementación, pruebas y despliegue}{subsection.1.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Comandos principales del pipeline facial.}}{8}{table.caption.13}\protected@file@percent }
+\newlabel{tab:comandos}{{3}{8}{Comandos principales del pipeline facial}{table.caption.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.9}Consideraciones de privacidad y seguridad}{8}{subsection.1.9}\protected@file@percent }
+\newlabel{subsec:seguridad}{{1.9}{8}{Consideraciones de privacidad y seguridad}{subsection.1.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.10}Estado actual}{8}{subsection.1.10}\protected@file@percent }
+\newlabel{subsec:estado}{{1.10}{8}{Estado actual}{subsection.1.10}{}}
+\gdef \@abspage@last{8}

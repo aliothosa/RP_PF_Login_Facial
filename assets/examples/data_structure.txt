@@ -1,0 +1,21 @@
+data
+|-- faces (caras extraidas sin procesar)
+|   |-- elioth
+|   |   |-- luz_ambiental
+|   |   `-- luz_frontal
+|   `-- emmanuel
+|       |-- luz_ambiental
+|       `-- luz_frontal
+|-- processed (dataset)
+|   |-- test
+|   |   |-- elioth
+|   |   `-- emmanuel
+|   |-- train
+|   |   |-- elioth
+|   |   `-- emmanuel
+|   `-- val
+|       |-- elioth
+|       `-- emmanuel
+`-- raw (videos mp4 de la webcam)
+    |-- elioth
+    `-- emmanuel

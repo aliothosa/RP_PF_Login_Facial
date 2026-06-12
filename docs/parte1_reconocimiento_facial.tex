@@ -1,0 +1,406 @@
+% =============================================================================
+% Sección insertable en documento maestro.
+% Requiere en el preámbulo: graphicx, tikz, listings, booktabs, float,
+%                           caption, xcolor, amsmath, hyperref (opcional).
+%
+% Rutas a assets: por defecto ../assets (compilar desde docs/).
+% Si el .tex maestro está en la raíz del repo, antes de \input{}:
+%   \renewcommand{\assetroot}{assets}
+% =============================================================================
+\providecommand{\assetroot}{../assets}
+
+% --- TikZ: estilos reutilizables del pipeline ---
+\tikzset{
+  block/.style={
+    rectangle, draw, rounded corners=2pt, align=center,
+    minimum height=0.85cm, minimum width=2.6cm,
+    fill=blue!8, font=\small
+  },
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, draw=gray!70},
+  phase/.style={
+    font=\small\bfseries, text=gray!50!black
+  }
+}
+
+\section{Parte 1 - Reconocimiento facial para inicio de sesión}
+\label{sec:parte1-facial}
+
+% ---------------------------------------------------------------------------
+\subsection{Visión general}
+\label{subsec:vision-general}
+
+El componente \textit{RP\_PF\_Login\_Facial} implementa un flujo de
+\textbf{identificación facial 1:N} para proponer el inicio de sesión en KDE Plasma.
+Reconoce dos identidades entrenadas (\texttt{elioth}, \texttt{emmanuel}) y asigna
+\texttt{guest} cuando la evidencia no supera los umbrales configurados.
+\texttt{guest} no es una clase del clasificador: es un mecanismo de rechazo en la
+capa de decisión.
+
+La Figura~\ref{fig:arquitectura-general} resume la separación entre entrenamiento
+offline e inferencia temporal en login. La identificación (visión + ML) se mantiene
+desacoplada de la autenticación del SO (PAM, \texttt{greetd}).
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[node distance=0.55cm and 0.45cm]
+    \node[phase] (pt) {Fase offline};
+    \node[block, below=0.25cm of pt] (data) {Dataset\\\texttt{data/faces}};
+    \node[block, right=of data] (prep) {\texttt{prepare-}\\\texttt{dataset}};
+    \node[block, right=of prep] (train) {\texttt{train}\\MobileNetV2};
+    \node[block, right=of train] (model) {\texttt{.keras}\\\texttt{class\_indices}};
+
+    \node[phase, below=1.35cm of data] (pi) {Fase login (5\,s)};
+    \node[block, below=0.25cm of pi] (cam) {Cámara\\Haar + ROI};
+    \node[block, right=of cam] (zip) {ZIP\\\texttt{faces/}};
+    \node[block, right=of zip] (inf) {Inferencia\\softmax};
+    \node[block, right=of inf] (agg) {Agregación\\temporal};
+    \node[block, right=of agg] (dec) {Decisión\\\texttt{guest}?};
+
+    \draw[arrow] (data) -- (prep);
+    \draw[arrow] (prep) -- (train);
+    \draw[arrow] (train) -- (model);
+    \draw[arrow] (cam) -- (zip);
+    \draw[arrow] (zip) -- (inf);
+    \draw[arrow] (inf) -- (agg);
+    \draw[arrow] (agg) -- (dec);
+    \draw[arrow, dashed] (model.south) -- ++(0,-0.55) -| (inf.north);
+  \end{tikzpicture}
+  \caption{Arquitectura general: entrenamiento offline e inferencia temporal en login.}
+  \label{fig:arquitectura-general}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\subsection{Estructura del proyecto y datos}
+\label{subsec:estructura}
+
+El paquete \texttt{src/rp\_face\_login/} se organiza en seis módulos funcionales
+más \texttt{cli.py} y \texttt{config.py}. La configuración central reside en
+\texttt{configs/default.yaml}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Módulos del pipeline facial.}
+  \label{tab:modulos}
+  \begin{tabular}{@{}l p{9.2cm}@{}}
+    \toprule
+    \textbf{Módulo} & \textbf{Responsabilidad} \\
+    \midrule
+    \texttt{acquisition/} & Captura temporal sin vista previa; ZIP con rostros recortados. \\
+    \texttt{vision/}      & Detección Haar, recorte con margen, redimensionado. \\
+    \texttt{training/}    & Dataset \texttt{train/val/test}, entrenamiento y evaluación. \\
+    \texttt{inference/}   & Predicción softmax por frame y agregación temporal. \\
+    \texttt{decision/}    & Política de aceptación o rechazo (\texttt{guest}). \\
+    \texttt{session/}     & Despacho simulado o integración experimental con \texttt{greetd}. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Los datos y artefactos se generan localmente (excluidos de git por privacidad).
+La estructura esperada se muestra en los Listados~\ref{lst:data-structure}
+y~\ref{lst:models-structure}.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \lstinputlisting[
+      style=plaintext,
+      caption={Estructura de \texttt{data/}.},
+      label={lst:data-structure}
+    ]{\assetroot/examples/data_structure.txt}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \lstinputlisting[
+      style=plaintext,
+      caption={Artefactos en \texttt{models/}.},
+      label={lst:models-structure}
+    ]{\assetroot/examples/models_structure.txt}
+  \end{minipage}
+\end{figure}
+
+Tras \texttt{prepare-dataset}, cada imagen válida queda como rostro recortado y
+redimensionado a $224 \times 224$. La Figura~\ref{fig:face-example} ilustra un
+ejemplo de muestra procesada lista para el clasificador.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.32\linewidth]{\assetroot/screenshots/extracted_face_example.jpg}
+  \caption{Ejemplo de rostro extraído y recortado ($224 \times 224$) para entrenamiento o inferencia.}
+  \label{fig:face-example}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\subsection{Adquisición y preprocesamiento visual}
+\label{subsec:adquisicion}
+
+\subsubsection{Captura temporal}
+
+El módulo \texttt{acquisition/camera\_capture.py} abre la cámara (por defecto
+índice~0, $1280 \times 720$, 5\,s), lee el máximo de frames posible y, por cada
+frame con detección, guarda el recorte en un ZIP en memoria
+(\texttt{faces/face\_NNNN.jpg}). No se usa \texttt{cv2.imshow}.
+
+\subsubsection{Detección Haar}
+
+OpenCV aplica \texttt{haarcascade\_frontalface\_default.xml} con
+\texttt{scale\_factor}\,$=$\,1.1, \texttt{min\_neighbors}\,$=$\,6 y tamaño mínimo
+$100 \times 100$~px. Ante varias detecciones se conserva la de mayor área.
+
+\subsubsection{Preprocesamiento}
+
+El pipeline (\texttt{vision/preprocessing.py}) recorta con margen de 30~px,
+redimensiona a $224 \times 224$, convierte BGR$\rightarrow$RGB y mantiene el rango
+$[0, 255]$ para que \texttt{preprocess\_input} del backbone normalice según ImageNet.
+
+% ---------------------------------------------------------------------------
+\subsection{Entrenamiento del clasificador}
+\label{subsec:entrenamiento}
+
+\subsubsection{Partición del dataset}
+
+\texttt{prepare-dataset} divide las imágenes aceptadas en proporciones
+70\,\% / 15\,\% / 15\,\% (\texttt{train/val/test}) con \texttt{seed}\,$=$\,42.
+Las estadísticas se guardan en \texttt{dataset\_stats.json}.
+
+\subsubsection{Arquitectura por transfer learning}
+
+El entrenamiento (\texttt{training/train\_model.py}) congela MobileNetV2
+(preentrenado en ImageNet) y añade una cabeza softmax de dos clases:
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=0.4cm,
+      layer/.style={
+        rectangle, draw, rounded corners=2pt, align=center,
+        minimum width=5.8cm, minimum height=0.75cm,
+        fill=green!8, font=\small
+      }
+    ]
+    \node[layer, fill=gray!10] (in)   {Entrada $224 \times 224 \times 3$ (RGB, $[0,255]$)};
+    \node[layer, below=of in]  (pre)  {\texttt{preprocess\_input} (MobileNetV2)};
+    \node[layer, below=of pre] (bb)  {MobileNetV2 congelado (\texttt{trainable=False})};
+    \node[layer, below=of bb]  (gap)  {GlobalAveragePooling2D};
+    \node[layer, below=of gap] (drop) {Dropout (0.3)};
+    \node[layer, below=of drop] (out) {Dense(2, softmax) $\rightarrow$ \texttt{elioth}, \texttt{emmanuel}};
+    \foreach \a/\b in {in/pre, pre/bb, bb/gap, gap/drop, drop/out}
+      \draw[arrow] (\a) -- (\b);
+  \end{tikzpicture}
+  \caption{Arquitectura del clasificador facial.}
+  \label{fig:red}
+\end{figure}
+
+Pérdida: entropía cruzada categórica. Métricas monitorizadas: \textit{accuracy},
+\textit{precision}, \textit{recall}. Hiperparámetros por defecto: 10 épocas,
+\textit{batch size}~32, Adam con $lr = 10^{-3}$.
+
+% ---------------------------------------------------------------------------
+\subsection{Evaluación offline}
+\label{subsec:evaluacion}
+
+\texttt{evaluate} infiere sobre \texttt{data/processed/test/} y genera
+\texttt{reports/evaluation.json} y \texttt{reports/confusion\_matrix.png}.
+La Figura~\ref{fig:confusion} corresponde a una ejecución real del proyecto sobre
+el conjunto de test local.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.62\linewidth]{\assetroot/screenshots/confusion_matrix.png}
+  \caption{Matriz de confusión en el conjunto de test ($N = 337$ muestras:
+    175 \texttt{elioth}, 162 \texttt{emmanuel}). No se observan confusiones entre clases.}
+  \label{fig:confusion}
+\end{figure}
+
+Con los conteos de la matriz, la precisión global en test es
+$\mathrm{accuracy} = (175 + 162) / 337 = 1{,}00$.
+Estos resultados dependen del dataset y condiciones de captura locales; no se
+versionan en el repositorio.
+
+% ---------------------------------------------------------------------------
+\subsection{Inferencia temporal y política de decisión}
+\label{subsec:inferencia}
+
+En login el modelo \textbf{no se reentrena}. \texttt{predict-zip} produce, por
+cada frame $i$, probabilidades $P(c_j \mid \text{frame}_i)$. La agregación
+temporal promedia por clase:
+
+\begin{equation}
+  \overline{s}(c_j) = \frac{1}{N} \sum_{i=1}^{N} P(c_j \mid \text{frame}_i)
+  \label{eq:temporal-avg}
+\end{equation}
+
+Se obtienen \texttt{best\_user}, \texttt{second\_user} y
+$\text{margin} = \texttt{best\_score} - \texttt{second\_score}$.
+La aceptación exige las tres condiciones de la Tabla~\ref{tab:umbrales}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Umbrales por defecto (\texttt{configs/default.yaml}).}
+  \label{tab:umbrales}
+  \begin{tabular}{@{}l c l@{}}
+    \toprule
+    \textbf{Parámetro} & \textbf{Valor} & \textbf{Condición} \\
+    \midrule
+    \texttt{min\_valid\_frames}   & 30   & $\texttt{valid\_frames} \geq 30$ \\
+    \texttt{confidence\_threshold} & 0.80 & $\texttt{best\_score} \geq 0.80$ \\
+    \texttt{margin\_threshold}    & 0.25 & $\texttt{margin} \geq 0.25$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Si falla alguna condición, \texttt{selected\_user} pasa a \texttt{guest} con
+motivos \texttt{insufficient\_frames}, \texttt{low\_confidence} o
+\texttt{margin\_below\_threshold}.
+
+\subsubsection{Demostración: login simulado}
+
+La Figura~\ref{fig:login-sim} muestra la salida de \texttt{login-sim} en un caso
+donde el clasificador identifica con alta confianza a \texttt{elioth}
+(\texttt{best\_score} $\approx 0{,}997$, \texttt{margin} $\approx 0{,}994$), pero la
+política rechaza el acceso por \texttt{insufficient\_frames} (22 frames válidos
+$<$ 30). Esto ilustra que \textbf{alta confianza softmax no implica aceptación}
+si no se cumplen todos los umbrales.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\assetroot/screenshots/login_sim_output.png}
+  \caption{Salida de \texttt{login-sim}: rechazo a \texttt{guest} pese a alta
+    confianza en \texttt{elioth} (\texttt{reason = insufficient\_frames}).}
+  \label{fig:login-sim}
+\end{figure}
+
+El Listado~\ref{lst:decision} reproduce el \texttt{decision.json} asociado a esa
+ejecución. El Listado~\ref{lst:predictions} muestra las primeras predicciones por
+frame del mismo lote.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}[t]{0.48\linewidth}
+    \lstinputlisting[
+      style=json,
+      caption={Decisión de login (\texttt{decision\_example.json}).},
+      label={lst:decision}
+    ]{\assetroot/examples/decision_example.json}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\linewidth}
+    \lstinputlisting[
+      style=json,
+      firstline=1, lastline=27,
+      caption={Primeras predicciones por frame (\texttt{predictions\_example.json}).},
+      label={lst:predictions}
+    ]{\assetroot/examples/predictions_example.json}
+  \end{minipage}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      decision/.style={
+        diamond, draw, aspect=2, align=center, inner sep=1pt,
+        fill=yellow!12, font=\small
+      },
+      outcome/.style={
+        rectangle, draw, rounded corners=2pt, align=center,
+        minimum width=2.2cm, font=\small
+      }
+    ]
+    \node[outcome] (start) {Agregación temporal};
+    \node[decision, below=0.6cm of start] (f) {$N \geq 30$?};
+    \node[decision, below left=0.7cm and 0.9cm of f] (c) {score $\geq 0.80$?};
+    \node[decision, below right=0.7cm and 0.9cm of f] (m) {margin $\geq 0.25$?};
+    \node[outcome, below=1.1cm of c, fill=green!15] (ok) {\texttt{best\_user}};
+    \node[outcome, below=1.8cm of f, fill=red!10] (no) {\texttt{guest}};
+
+    \draw[arrow] (start) -- (f);
+    \draw[arrow] (f) -- node[left, font=\scriptsize]{sí} (c);
+    \draw[arrow] (f) -- node[right, font=\scriptsize]{no} (no);
+    \draw[arrow] (c) -- node[above, font=\scriptsize]{sí} (m);
+    \draw[arrow] (c) -- node[left, font=\scriptsize]{no} (no);
+    \draw[arrow] (m) -- node[right, font=\scriptsize]{sí} (ok);
+    \draw[arrow] (m) -- (no);
+  \end{tikzpicture}
+  \caption{Diagrama de la política de decisión (las tres condiciones deben cumplirse).}
+  \label{fig:decision-flow}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\subsection{Integración con el entorno de escritorio}
+\label{subsec:integracion}
+
+El greeter experimental (\texttt{scripts/face-login-greeter.sh}) encadena
+\texttt{login-sim} con el despachador de sesión. La Figura~\ref{fig:greetd}
+muestra el arranque bajo \texttt{greetd} en modo \texttt{greetd-ipc}, con rutas
+de despliegue en \texttt{/opt/rp\_face\_login} y ejecución del paso 1/3
+(\texttt{login-sim}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{\assetroot/screenshots/greetd-output.png}
+  \caption{Log de \texttt{face-login-greeter} en VM: configuración, modelo y
+    \texttt{dispatch\_mode=greetd-ipc}.}
+  \label{fig:greetd}
+\end{figure}
+
+Se distinguen tres niveles documentados en \texttt{docs/deploy\_endeavouros\_vm.md}:
+
+\begin{itemize}
+  \item \textbf{L1:} \texttt{dry-run} --- valida ML sin abrir Plasma.
+  \item \textbf{L2:} demo híbrida con greeter gráfico y contraseña PAM.
+  \item \textbf{L3:} \texttt{greetd-ipc} --- PAM + \texttt{startplasma-wayland}
+        tras identificación facial.
+\end{itemize}
+
+En todos los casos el rostro propone el \textit{username}; PAM sigue siendo la
+autoridad de autenticación.
+
+% ---------------------------------------------------------------------------
+\subsection{Implementación, pruebas y despliegue}
+\label{subsec:implementacion}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Comandos principales del pipeline facial.}
+  \label{tab:comandos}
+  \begin{tabular}{@{}l p{7.8cm}@{}}
+    \toprule
+    \textbf{Comando} & \textbf{Función} \\
+    \midrule
+    \texttt{prepare-dataset} & Genera \texttt{data/processed/\{train,val,test\}}. \\
+    \texttt{train}           & Entrena y guarda \texttt{face\_auth\_model.keras}. \\
+    \texttt{evaluate}        & Métricas y matriz de confusión en test. \\
+    \texttt{capture}         & ZIP temporal de rostros (sin vista previa). \\
+    \texttt{predict-zip}     & Inferencia softmax por frame desde ZIP. \\
+    \texttt{login-sim}       & Flujo completo de login simulado. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El entorno se gestiona con \texttt{uv}; dependencias ML en el extra \texttt{[ml]}
+(TensorFlow, scikit-learn, Matplotlib). La suite \texttt{tests/} cubre detección,
+preprocesamiento, entrenamiento, inferencia, agregación, decisión y despacho.
+Opcionalmente, PyInstaller genera \texttt{face-login-capture} y
+\texttt{face-login-sim}.
+
+% ---------------------------------------------------------------------------
+\subsection{Consideraciones de privacidad y seguridad}
+\label{subsec:seguridad}
+
+\begin{itemize}
+  \item Rostros, ZIP de captura, modelos y reportes son datos sensibles
+        (\texttt{.gitignore}); las figuras de este documento provienen de
+        ejecuciones locales controladas.
+  \item El softmax puede ser confiado ante rostros no vistos; los umbrales y
+        \texttt{guest} mitigan falsos positivos.
+  \item Un lote de login \textbf{nunca} debe usarse para reentrenar el modelo.
+  \item En integración real no se debe omitir PAM ni hardcodear contraseñas.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\subsection{Estado actual}
+\label{subsec:estado}
+
+El pipeline facial está implementado de extremo a extremo: preparación de dataset,
+entrenamiento, evaluación offline, captura sin vista previa, inferencia con
+agregación temporal y política de rechazo explícita. Las Figuras
+\ref{fig:confusion}--\ref{fig:login-sim} documentan resultados reales del entorno
+de desarrollo. La integración con \texttt{greetd} (Figura~\ref{fig:greetd}) se
+valida en VM como fase experimental posterior al \texttt{login-sim}.
