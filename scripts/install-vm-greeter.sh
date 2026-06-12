@@ -46,12 +46,17 @@ export REPO_ROOT="/opt/rp_face_login"
 export CONFIG="/opt/rp_face_login/configs/default.yaml"
 export MODEL="/opt/rp_face_login/models/face_auth_model.keras"
 export LOG_FILE="/opt/rp_face_login/logs/face-login.log"
-export DISPATCH_MODE="${DISPATCH_MODE:-greetd-ipc}"
-# L1 validación: export DISPATCH_MODE=dry-run
-# Si existe binario PyInstaller, úsalo (no requiere uv en PATH del usuario greeter)
-if [[ -x "/opt/rp_face_login/bin/face-login-sim" ]]; then
-    export FACE_LOGIN_BIN="/opt/rp_face_login/bin/face-login-sim"
-fi
+export DISPATCH_MODE="${DISPATCH_MODE:-dry-run}"
+# L3 Plasma: export DISPATCH_MODE=greetd-ipc
+# L3 PAM (VM): export FACE_LOGIN_PAM_PASSWORD='...'
+# Python del repo — ver docs/deploy_endeavouros_vm.md §11.3.1 (recomendado vs PyInstaller)
+# export PYTHON_BIN="/home/elioth/RP_PF_Login_Facial/.venv/bin/python"
+# export PYTHONPATH="/home/elioth/RP_PF_Login_Facial/src"
+unset FACE_LOGIN_BIN
+# PyInstaller --onefile + TF suele fallar bajo greeter; ver doc §12
+#if [[ -x "/opt/rp_face_login/bin/face-login-sim" ]]; then
+#    export FACE_LOGIN_BIN="/opt/rp_face_login/bin/face-login-sim"
+#fi
 exec /opt/rp_face_login/bin/face-login-greeter "$@"
 LAUNCHER
 chmod 755 "${INSTALL_ROOT}/bin/greetd-face-login"
@@ -72,4 +77,4 @@ echo "Instalado:"
 echo "  ${INSTALL_ROOT}/bin/greetd-face-login"
 echo "  /usr/local/bin/greetd-face-login -> ..."
 echo ""
-echo "Siguiente paso: configurar /etc/greetd/config.toml (ver docs/deploy_endeavouros_vm.md §11)."
+echo "Siguiente paso: editar ${INSTALL_ROOT}/bin/greetd-face-login (§11.3.1) y greetd."

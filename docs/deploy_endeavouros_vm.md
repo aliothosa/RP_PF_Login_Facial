@@ -215,9 +215,9 @@ ls /dev/video*
 
 ```bash
 mkdir -p ~/Projects && cd ~/Projects
-git clone git@github.com:aliothosa/RP_PF_Login_Facial.git PF_PAT
-cd PF_PAT
-git checkout feature/fatial-recognition   # o la rama activa del proyecto
+git clone git@github.com:aliothosa/RP_PF_Login_Facial.git RP_PF_Login_Facial
+cd RP_PF_Login_Facial
+git checkout main   # o la rama activa del proyecto
 ```
 
 ### 6.2 Fijar Python 3.12 con uv
@@ -514,6 +514,27 @@ Lo que SÍ funciona (modo greetd-ipc, L3):
 La identidad facial (`selected_user`) y la autenticación del SO (PAM/greetd)
 siguen siendo capas distintas. Ver [`greetd_integration.md`](greetd_integration.md) §7.
 
+### 11.0.1 Orden obligatorio de despliegue (lecciones de la VM)
+
+> **No actives greetd + L3 en el primer intento.** Errores habituales si se
+> salta este orden: PyInstaller que no extrae TensorFlow, PAM sin contraseña
+> configurable, bucle de reinicio del greeter.
+
+| Paso | Qué validar | ¿Toca greetd? |
+|---|---|---|
+| **0** | Snapshot `antes-de-greetd` | No |
+| **1** | `login-sim` OK como tu usuario (`uv run`) | No |
+| **2** | `DISPATCH_MODE=dry-run ./scripts/face-login-greeter.sh` OK | No |
+| **3** | `sudo ./scripts/install-vm-greeter.sh` + launcher con **venv** (§11.3) | No |
+| **4** | `sudo -u greeter .../greetd-face-login` con **dry-run** OK | No |
+| **5** | Configurar `/etc/greetd/config.toml` + **probar L1** al arranque | Sí |
+| **6** | Pasar launcher a **L3** (`greetd-ipc` + `FACE_LOGIN_PAM_PASSWORD`) | Sí |
+| **7** | `systemctl restart greetd` o reboot | Sí |
+
+**Regla:** no cambies el gestor de login (SDDM / `plasmalogin`) hasta completar
+el paso 4. El paso 6 es cuando ya viste `[dry-run]` en
+`/opt/rp_face_login/logs/face-login.log`.
+
 ---
 
 ### 11.1 Paquetes del sistema (EndeavourOS / Arch)
@@ -562,18 +583,21 @@ Si la cámara solo funciona para tu usuario, el greeter fallará en greetd aunqu
 
 ### 11.3 Instalar artefactos del proyecto en `/opt`
 
-Desde el repo (con modelo entrenado):
+Desde el repo (con modelo entrenado), por ejemplo
+`/home/elioth/RP_PF_Login_Facial`:
 
 ```bash
-cd ~/Projects/PF_PAT
+cd ~/RP_PF_Login_Facial   # o la ruta donde clonaste el repo
 sudo ./scripts/install-vm-greeter.sh
+sudo cp scripts/face-login-greeter.sh /opt/rp_face_login/bin/face-login-greeter
+sudo chmod 755 /opt/rp_face_login/bin/face-login-greeter
 ```
 
 Esto crea:
 
 ```text
 /opt/rp_face_login/
-├── bin/greetd-face-login      # launcher con env vars fijas
+├── bin/greetd-face-login      # launcher (editar a mano, §11.3.1)
 ├── bin/face-login-greeter     # script principal
 ├── configs/default.yaml
 ├── models/face_auth_model.keras
@@ -581,19 +605,89 @@ Esto crea:
 /usr/local/bin/greetd-face-login -> /opt/rp_face_login/bin/greetd-face-login
 ```
 
-**Opcional (recomendado en VM):** binario PyInstaller para no depender de `uv`
-en el PATH del usuario `greeter`:
+#### 11.3.1 Launcher recomendado (venv, no PyInstaller)
+
+En la VM **falló** el binario `face-login-sim` (PyInstaller `--onefile` + TensorFlow)
+bajo el usuario `greeter`:
+
+```text
+[PYI-669:ERROR] Failed to extract ... decompression resulted in return code -1!
+```
+
+Causa habitual: el bundle descomprime ~1 GB en `/tmp/_MEI*` y `/tmp` del greeter
+es pequeño o se llena en reinicios. **Solución probada:** usar el `.venv` del repo
+con `PYTHON_BIN` (sin PyInstaller).
+
+Edita el launcher:
+
+```bash
+sudo tee /opt/rp_face_login/bin/greetd-face-login >/dev/null <<'EOF'
+#!/usr/bin/env bash
+export REPO_ROOT="/opt/rp_face_login"
+export CONFIG="/opt/rp_face_login/configs/default.yaml"
+export MODEL="/opt/rp_face_login/models/face_auth_model.keras"
+export LOG_FILE="/opt/rp_face_login/logs/face-login.log"
+
+# Fase L1 (primero): dry-run — NO abre Plasma
+export DISPATCH_MODE="${DISPATCH_MODE:-dry-run}"
+
+# Fase L3 (después): descomenta las dos líneas siguientes y comenta dry-run arriba
+# export DISPATCH_MODE=greetd-ipc
+# export FACE_LOGIN_PAM_PASSWORD='contraseña_linux_del_usuario_reconocido'
+
+# Python del repo (ajusta la ruta a tu clon)
+export PYTHON_BIN="/home/elioth/RP_PF_Login_Facial/.venv/bin/python"
+export PYTHONPATH="/home/elioth/RP_PF_Login_Facial/src"
+unset FACE_LOGIN_BIN
+
+exec /opt/rp_face_login/bin/face-login-greeter "$@"
+EOF
+sudo chmod 755 /opt/rp_face_login/bin/greetd-face-login
+```
+
+Permisos para que `greeter` ejecute el venv (sustituye `elioth` si aplica):
+
+```bash
+sudo chmod o+x /home/elioth
+sudo chmod -R o+rX /home/elioth/RP_PF_Login_Facial/.venv
+sudo chmod -R o+rX /home/elioth/RP_PF_Login_Facial/src
+```
+
+Si dejaste un PyInstaller roto en `/opt`, desactívalo:
+
+```bash
+sudo mv /opt/rp_face_login/bin/face-login-sim \
+        /opt/rp_face_login/bin/face-login-sim.bak 2>/dev/null || true
+```
+
+#### 11.3.2 PyInstaller (opcional, no recomendado como primera opción)
+
+Solo si necesitas un binario standalone **y** reservas espacio en `/tmp`:
 
 ```bash
 ./scripts/build_pyinstaller.sh login-sim
 sudo cp dist/face-login-sim /opt/rp_face_login/bin/
-sudo chown root:greeter /opt/rp_face_login/bin/face-login-sim
-sudo chmod 750 /opt/rp_face_login/bin/face-login-sim
+# En el launcher, añade: export TMPDIR=/opt/rp_face_login/tmp
+# y: mkdir -p /opt/rp_face_login/tmp && chown greeter:greeter ...
 ```
 
-El launcher detecta `FACE_LOGIN_BIN` automáticamente si existe ese binario.
+Preferir **§11.3.1** (venv) salvo que hayas verificado:
 
-Plantilla de config para VM: [`configs/greetd-vm.example.yaml`](../configs/greetd-vm.example.yaml).
+```bash
+sudo -u greeter env TMPDIR=/opt/rp_face_login/tmp \
+  /opt/rp_face_login/bin/face-login-sim --help
+```
+
+Plantilla de config para VM (L3): [`configs/greetd-vm.example.yaml`](../configs/greetd-vm.example.yaml).
+
+#### 11.3.3 Probar como greeter **antes** de habilitar greetd al arranque
+
+```bash
+sudo -u greeter /opt/rp_face_login/bin/greetd-face-login --duration 5
+sudo tail -25 /opt/rp_face_login/logs/face-login.log
+```
+
+Debe completar pasos 1–3 y mostrar `[dry-run]`. Si falla aquí, no sigas al §11.4 C.
 
 ---
 
@@ -607,25 +701,30 @@ sudo tee /etc/greetd/config.toml >/dev/null <<'EOF'
 [terminal]
 vt = 1
 
-# Nivel L1 (validación): dry-run — no abre Plasma
-# command = "cage -s -- /opt/rp_face_login/bin/greetd-face-login --duration 5"
-
-# Nivel L3 (Plasma vía greetd-ipc): greeter habla PAM + start_session
 [default_session]
 command = "/opt/rp_face_login/bin/greetd-face-login --duration 5"
 user = "greeter"
 EOF
 ```
 
-Variables en el launcher (`/opt/rp_face_login/bin/greetd-face-login`):
+No hace falta `cage` para el greeter facial; la cámara se abre directamente.
 
-```bash
-export DISPATCH_MODE=greetd-ipc          # L3 (default tras install-vm-greeter.sh)
-# export DISPATCH_MODE=dry-run           # L1
-export FACE_LOGIN_PAM_PASSWORD=          # opcional: contraseña PAM sin prompt TTY
+#### B) Config YAML en `/opt` (según fase)
+
+**L1 — dry-run** (primer arranque con greetd):
+
+```yaml
+session_dispatch:
+  mode: dry-run
 ```
 
-En `configs/default.yaml` (o `greetd-vm.example.yaml`):
+**L3 — greetd-ipc** (tras validar L1):
+
+```bash
+sudo cp configs/greetd-vm.example.yaml /opt/rp_face_login/configs/default.yaml
+```
+
+Valores críticos en `greetd_ipc`:
 
 ```yaml
 session_dispatch:
@@ -633,13 +732,28 @@ session_dispatch:
   greetd_ipc:
     default_cmd: ["/usr/bin/startplasma-wayland"]
     password_env: FACE_LOGIN_PAM_PASSWORD
-    prompt_password: true
+    prompt_password: false    # IMPORTANTE: true falla bajo greetd (ver §12)
   users:
     elioth:
       command: "/usr/bin/startplasma-wayland"
+    emmanuel:
+      command: "/usr/bin/startplasma-wayland"
 ```
 
-#### B) `/etc/pam.d/greetd` — **no saltar PAM**
+Contraseña PAM: **no uses `prompt_password: true`** bajo greetd (error
+`/dev/tty: not writable`). Define en el launcher:
+
+```bash
+export FACE_LOGIN_PAM_PASSWORD='contraseña_linux_de_elioth'
+# Opcional por usuario:
+# export FACE_LOGIN_PAM_PASSWORD_ELIOTH='...'
+# export FACE_LOGIN_PAM_PASSWORD_EMMANUEL='...'
+```
+
+La contraseña debe ser la del **usuario Linux reconocido** (PAM), no solo la de SSH
+si difieren.
+
+#### C) `/etc/pam.d/greetd` — **no saltar PAM**
 
 ```bash
 sudo cp /etc/pam.d/greetd /etc/pam.d/greetd.bak 2>/dev/null || true
@@ -657,17 +771,24 @@ session    include      system-local-login
 
 No elimines estas líneas para "acelerar" el login facial.
 
-#### C) Habilitar greetd (solo VM; SDDM sigue instalado)
+#### D) Habilitar greetd (solo tras pasos §11.3.3 y §11.0.1)
+
+Desactiva el gestor de login que uses (uno u otro):
 
 ```bash
+# Si usas SDDM (EndeavourOS clásico):
 sudo systemctl disable --now sddm
+
+# Si usas plasmalogin (KDE reciente):
+sudo systemctl disable --now plasmalogin
+
 sudo systemctl enable --now greetd
 sudo reboot
 ```
 
-TTY de rescate: `Ctrl+Alt+F3`.
+TTY de rescate: `Ctrl+Alt+F3` (SSH también sirve si la red está up).
 
-#### D) Logs tras el arranque
+#### E) Logs tras el arranque
 
 ```bash
 journalctl -u greetd -b --no-pager
@@ -678,9 +799,26 @@ Códigos de salida del greeter:
 
 | Exit | Significado |
 |---|---|
-| 0 | Usuario aceptado; despacho completado |
-| 1 | Error (cámara, TF, modelo) |
+| 0 | Usuario aceptado; despacho completado (L1 dry-run o L3 ipc OK) |
+| 1 | Error (cámara, TF, PyInstaller, dispatcher/PAM) |
 | 2 | Rechazo a `guest`; greetd reinicia el greeter |
+
+Log de **éxito L1**:
+
+```text
+Paso 2/3: selected_user=elioth accepted=true
+Paso 3/3: despachando sesión...
+[dry-run] Se despacharía sesión para 'elioth': ...
+Hecho. Usuario=elioth.
+```
+
+Log de **éxito L3**:
+
+```text
+[greetd-ipc] Sesión solicitada para 'elioth': /usr/bin/startplasma-wayland
+dispatch -> user=elioth mode=greetd-ipc executed=True returncode=0
+Hecho. Usuario=elioth.
+```
 
 ---
 
@@ -725,14 +863,24 @@ Tras reconocimiento facial, el greeter usa el protocolo oficial de greetd:
 
 #### Contraseña PAM (el rostro no sustituye PAM)
 
-El modelo solo sugiere el **username**. PAM sigue autenticando. Opciones en VM:
+El modelo solo sugiere el **username**. PAM sigue autenticando.
 
-| Método | Uso |
-|---|---|
-| `prompt_password: true` en config | Lee contraseña desde `/dev/tty` tras la captura |
-| `FACE_LOGIN_PAM_PASSWORD` en env | Contraseña fija para pruebas (no producción) |
-| Módulo PAM facial (Howdy) | Factor `auth sufficient` + fallback contraseña |
-| `pam_permit.so` solo en VM | Demo académica sin contraseña (inseguro) |
+| Método | ¿Funciona bajo greetd? | Notas |
+|---|---|---|
+| `FACE_LOGIN_PAM_PASSWORD` en launcher | **Sí (recomendado VM)** | Contraseña Linux del usuario reconocido |
+| `prompt_password: true` | **No** (TTY no escribible) | Error: `/dev/tty: not writable` |
+| Módulo PAM facial (Howdy) | Variable | Integración avanzada |
+| `pam_permit.so` solo en VM | Sí (inseguro) | Solo laboratorio |
+
+#### Pasos L3 en la VM (después de L1 OK)
+
+1. Editar launcher: `DISPATCH_MODE=greetd-ipc` + `FACE_LOGIN_PAM_PASSWORD`.
+2. `sudo cp configs/greetd-vm.example.yaml /opt/rp_face_login/configs/default.yaml`
+3. Comprobar: `test -x /usr/bin/startplasma-wayland`
+4. `sudo systemctl restart greetd` (o reboot).
+
+> **Nota:** `greetd-ipc` solo funciona cuando greetd lanza el greeter (variable
+> `GREETD_SOCK`). No pruebes L3 con `sudo -u greeter ...` a mano fuera de greetd.
 
 Ejemplo PAM de prueba **solo VM** (antes de `system-local-login`):
 
@@ -742,18 +890,6 @@ auth       sufficient   pam_permit.so
 auth       include      system-local-login
 ...
 ```
-
-#### Pasos L3 en la VM
-
-```bash
-sudo ./scripts/install-vm-greeter.sh
-sudo cp configs/greetd-vm.example.yaml /opt/rp_face_login/configs/default.yaml
-# Editar /etc/greetd/config.toml (§11.4, L3 sin cage obligatorio)
-sudo systemctl restart greetd
-```
-
-Tras login facial aceptado, si PAM pide contraseña verás el prompt en TTY o usa
-`export FACE_LOGIN_PAM_PASSWORD=tu_clave` en el launcher.
 
 ---
 
@@ -780,20 +916,18 @@ Tras login facial aceptado, si PAM pide contraseña verás el prompt en TTY o us
 
 ```text
 [ ] Snapshot "antes-de-greetd"
-[ ] greetd, cage, plasma-meta, sddm instalados (SDDM no borrado)
+[ ] login-sim OK como usuario normal (uv run)
+[ ] face-login-greeter.sh dry-run OK en consola
+[ ] greetd, plasma-meta instalados; SDDM/plasmalogin no borrados
 [ ] Usuario greeter en grupos video,input
 [ ] sudo -u greeter puede leer /dev/video0
-[ ] models/ copiado a /opt/rp_face_login/models/
-[ ] sudo ./scripts/install-vm-greeter.sh
-[ ] (opcional) face-login-sim PyInstaller en /opt/rp_face_login/bin/
-[ ] configs/default.yaml con mode: greetd-ipc (o greetd-vm.example.yaml)
-[ ] /etc/greetd/config.toml → greetd-face-login (L3) o dry-run (L1)
-[ ] Contraseña PAM: prompt_password o FACE_LOGIN_PAM_PASSWORD definido
-[ ] /etc/pam.d/greetd incluye system-local-login (PAM intacto)
-[ ] systemctl enable greetd; reboot
-[ ] Log en /opt/rp_face_login/logs/face-login.log muestra selected_user + greetd-ipc
-[ ] Rollback a SDDM probado (§13)
-[ ] Para demo solo contraseña sin rostro: usar L2 (tuigreet) o SDDM
+[ ] install-vm-greeter.sh + launcher venv (§11.3.1), sin PyInstaller roto
+[ ] sudo -u greeter greetd-face-login dry-run OK (§11.3.3)
+[ ] /etc/greetd/config.toml → greetd-face-login
+[ ] Arranque L1: log muestra [dry-run] + selected_user
+[ ] L3: greetd-vm.example.yaml + FACE_LOGIN_PAM_PASSWORD + prompt_password: false
+[ ] Log L3: [greetd-ipc] Sesión solicitada + Hecho. Usuario=...
+[ ] Rollback probado (§13)
 ```
 
 ---
@@ -851,11 +985,44 @@ cat reports/decision.json
 
 ### Greeter falla con `uv: command not found` (usuario greeter)
 
-El usuario `greeter` no tiene `uv` en PATH. Soluciones:
+El usuario `greeter` no tiene `uv` en PATH.
 
-1. **Recomendado:** PyInstaller + copiar a `/opt/rp_face_login/bin/face-login-sim`
-2. Instalar con `sudo ./scripts/install-vm-greeter.sh` (usa launcher con env fijos)
-3. Probar manualmente: `sudo -u greeter /opt/rp_face_login/bin/greetd-face-login --duration 5`
+**Solución recomendada (probada en VM):** launcher con `PYTHON_BIN` apuntando al
+`.venv` del repo (§11.3.1), no PyInstaller ni `uv run`.
+
+### `[PYI-xxx:ERROR] Failed to extract` (PyInstaller + TensorFlow)
+
+```text
+[PYI-669:ERROR] Failed to extract tensorflow/... decompression resulted in return code -1!
+```
+
+**Causa:** binario `--onefile` descomprime TensorFlow en `/tmp`; espacio insuficiente
+o bundle corrupto bajo usuario `greeter`.
+
+**Solución:**
+
+1. Renombrar `/opt/rp_face_login/bin/face-login-sim` → `.bak`
+2. Usar launcher §11.3.1 (`PYTHON_BIN` + `PYTHONPATH`)
+3. O definir `TMPDIR=/opt/rp_face_login/tmp` con varios GB libres
+
+### `ERROR: dispatcher falló` tras `Paso 3/3`
+
+El reconocimiento facial **sí funcionó**; falló greetd-ipc o PAM.
+
+| Mensaje en log | Causa | Arreglo |
+|---|---|---|
+| `/dev/tty: not writable` | `prompt_password: true` | `prompt_password: false` + `FACE_LOGIN_PAM_PASSWORD` en launcher |
+| `Define FACE_LOGIN_PAM_PASSWORD` | Variable no definida | Añadir export en launcher |
+| `auth_error` / bad password | Contraseña PAM incorrecta | Usar contraseña **Linux** del usuario reconocido |
+| `GREETD_SOCK no está definido` | Prueba manual fuera de greetd | Probar solo con greetd activo o restart |
+| `start_session` error | Ruta Plasma incorrecta | `grep Exec= /usr/share/wayland-sessions/plasma.desktop` |
+
+Diagnóstico:
+
+```bash
+sudo grep -A20 "Paso 3/3" /opt/rp_face_login/logs/face-login.log | tail -25
+journalctl -u greetd -b --no-pager | tail -40
+```
 
 ### greetd reinicia el greeter en bucle (exit code 2)
 
@@ -872,11 +1039,16 @@ El usuario `greeter` no tiene `uv` en PATH. Soluciones:
 
 ## 13. Rollback y snapshots
 
-### Volver a SDDM (sin snapshot)
+### Volver a SDDM o plasmalogin (sin snapshot)
 
 ```bash
 sudo systemctl disable --now greetd
+
+# Restaurar el gestor que usabas antes:
 sudo systemctl enable --now sddm
+# o:
+sudo systemctl enable --now plasmalogin
+
 sudo reboot
 ```
 
@@ -895,7 +1067,8 @@ sudo systemctl restart greetd
 | `EndeavourOS-KDE-SDDM-OK` | Post-instalación |
 | `pipeline-A-OK` | Tras login-sim exitoso |
 | `antes-de-greetd` | Antes de tocar `/etc/greetd` |
-| `greetd-dry-run-OK` | Tras validar greeter en VM |
+| `greetd-dry-run-OK` | Tras `[dry-run]` OK como greeter (§11.3.3) |
+| `greetd-ipc-OK` | Tras entrar a Plasma con L3 |
 
 ---
 
@@ -920,16 +1093,13 @@ sudo systemctl restart greetd
 
 ```text
 [ ] Snapshot "antes-de-greetd"
-[ ] SDDM sigue instalado (rollback probado)
-[ ] greetd + cage + plasma-meta instalados
-[ ] install-vm-greeter.sh ejecutado (/opt/rp_face_login)
-[ ] greeter user: grupos video,input; /dev/video0 OK con sudo -u greeter
-[ ] /etc/greetd/config.toml → greetd-face-login (L1 dry-run)
-[ ] /etc/pam.d/greetd intacto (PAM no saltado)
-[ ] journalctl -u greetd sin errores; log en /opt/rp_face_login/logs/
-[ ] Entendido: L1 no abre Plasma; L2 requiere tuigreet/SDDM + contraseña
-[ ] TTY Ctrl+Alt+F3 verificado
-[ ] Máquina principal NO modificada
+[ ] Pasos §11.0.1 completados en orden (dry-run antes de ipc)
+[ ] Launcher venv §11.3.1; PyInstaller desactivado si falló
+[ ] sudo -u greeter dry-run OK antes de enable greetd
+[ ] Arranque L1 con log [dry-run]
+[ ] L3: FACE_LOGIN_PAM_PASSWORD + prompt_password: false
+[ ] Rollback sddm/plasmalogin probado (§13)
+[ ] TTY Ctrl+Alt+F3 o SSH de rescate verificado
 ```
 
 ---
@@ -939,6 +1109,8 @@ sudo systemctl restart greetd
 | Documento | Contenido |
 |---|---|
 | [`README.md`](../README.md) | Arquitectura técnica, comandos CLI, reglas de decisión |
+| [`explicacion_proyecto.md`](explicacion_proyecto.md) | Visión general para defensa académica |
+| [`reconocimiento_patrones.md`](reconocimiento_patrones.md) | ML, capas, entrenamiento, decisión |
 | [`vm_test_protocol.md`](vm_test_protocol.md) | Fases A–D resumidas, checklist de seguridad |
 | [`greetd_integration.md`](greetd_integration.md) | PAM vs identidad, opciones de integración |
 | [`plan.md`](plan.md) | Plan completo del proyecto académico |
@@ -961,13 +1133,23 @@ uv run python -m rp_face_login.cli evaluate --dataset-dir data/processed/test --
 # --- Login simulado ---
 uv run python -m rp_face_login.cli login-sim --output-dir ./capturas --model models/face_auth_model.keras --save-decision reports/decision.json
 
-# --- Greeter (consola, fases B–C) ---
+# --- Greeter consola (obligatorio antes de greetd) ---
 DISPATCH_MODE=dry-run ./scripts/face-login-greeter.sh --duration 5
 
-# --- Instalar en /opt para greetd (VM) ---
+# --- Instalar en /opt + launcher venv (VM) ---
 sudo ./scripts/install-vm-greeter.sh
-# Luego editar /etc/greetd/config.toml (ver §11.4) y enable greetd
+# Editar /opt/rp_face_login/bin/greetd-face-login (ver §11.3.1)
+sudo -u greeter /opt/rp_face_login/bin/greetd-face-login --duration 5
 
-# --- Rollback greetd ---
-sudo systemctl disable --now greetd && sudo systemctl enable --now sddm && sudo reboot
+# --- Habilitar greetd (L1 dry-run primero) ---
+sudo systemctl disable --now plasmalogin   # o: sddm
+sudo systemctl enable --now greetd && sudo reboot
+
+# --- Pasar a L3 (greetd-ipc + contraseña PAM en launcher) ---
+sudo systemctl restart greetd
+
+# --- Rollback ---
+sudo systemctl disable --now greetd
+sudo systemctl enable --now plasmalogin   # o: sddm
+sudo reboot
 ```
