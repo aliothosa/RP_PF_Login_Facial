@@ -4,7 +4,9 @@ Sistema de autenticación / identificación facial **1:N** para login en KDE Pla
 Reconoce dos identidades conocidas (`elioth`, `emmanuel`) y redirige a **`guest`**
 mediante un mecanismo de **rechazo** cuando la confianza no es suficiente.
 
-Documentación extendida: [`docs/plan.md`](docs/plan.md),
+Documentación extendida: [`docs/explicacion_proyecto.md`](docs/explicacion_proyecto.md),
+[`docs/reconocimiento_patrones.md`](docs/reconocimiento_patrones.md),
+[`docs/plan.md`](docs/plan.md),
 [`docs/deploy_endeavouros_vm.md`](docs/deploy_endeavouros_vm.md),
 [`docs/greetd_integration.md`](docs/greetd_integration.md),
 [`docs/vm_test_protocol.md`](docs/vm_test_protocol.md).

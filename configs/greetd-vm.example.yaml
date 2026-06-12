@@ -50,9 +50,10 @@ session_dispatch:
   greetd_ipc:
     socket_env: "GREETD_SOCK"
     default_cmd: ["/usr/bin/startplasma-wayland"]
-    # Contraseña PAM: env (VM) o prompt en /dev/tty si cage tiene TTY
+    # Contraseña PAM: bajo greetd suele fallar prompt_password (TTY no escribible).
+    # Define FACE_LOGIN_PAM_PASSWORD en el launcher (solo VM de prueba).
     password_env: "FACE_LOGIN_PAM_PASSWORD"
-    prompt_password: true
+    prompt_password: false
     env: []
   users:
     elioth:

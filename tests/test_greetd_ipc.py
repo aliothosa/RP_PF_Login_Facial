@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from rp_face_login.session.greetd_ipc import GreetdIpcClient, GreetdIpcError
+from rp_face_login.session.greetd_ipc import (
+    GreetdIpcClient,
+    GreetdIpcError,
+    default_password_callback,
+)
 
 
 def _pack_message(payload: dict) -> bytes:
@@ -98,6 +102,30 @@ def test_launch_session_with_password_callback(greetd_sock_path: str) -> None:
         ["/usr/bin/startplasma-wayland"],
         password_callback=password_cb,
     )
+
+
+def test_default_password_callback_uses_env(monkeypatch) -> None:
+    monkeypatch.setenv("FACE_LOGIN_PAM_PASSWORD", "from-env")
+    cb = default_password_callback(password_env="FACE_LOGIN_PAM_PASSWORD", prompt_password=False)
+    assert cb("secret", "Password:") == "from-env"
+    assert cb("info", "msg") is None
+
+
+def test_default_password_callback_uses_per_user_env(monkeypatch) -> None:
+    monkeypatch.setenv("FACE_LOGIN_PAM_PASSWORD_ELIOTH", "elioth-pass")
+    monkeypatch.setenv("FACE_LOGIN_PAM_PASSWORD", "fallback")
+    cb = default_password_callback(
+        password_env="FACE_LOGIN_PAM_PASSWORD",
+        username="elioth",
+        prompt_password=False,
+    )
+    assert cb("secret", "Password:") == "elioth-pass"
+
+
+def test_default_password_callback_missing_env_raises() -> None:
+    cb = default_password_callback(password_env="FACE_LOGIN_PAM_PASSWORD", prompt_password=False)
+    with pytest.raises(GreetdIpcError, match="FACE_LOGIN_PAM_PASSWORD"):
+        cb("secret", "Password:")
 
 
 def test_missing_greetd_sock_raises(monkeypatch) -> None:

@@ -63,11 +63,6 @@ def build_model(
         from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
         base = MobileNetV2(include_top=False, weights=weights, input_shape=input_shape)
-    elif backbone == "EfficientNetB0":
-        from tensorflow.keras.applications import EfficientNetB0
-        from tensorflow.keras.applications.efficientnet import preprocess_input
-
-        base = EfficientNetB0(include_top=False, weights=weights, input_shape=input_shape)
     else:
         raise ValueError(
             f"Backbone no soportado: {backbone}. Usa uno de {SUPPORTED_BACKBONES}."

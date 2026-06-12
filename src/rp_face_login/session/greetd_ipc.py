@@ -154,36 +154,75 @@ class GreetdIpcClient:
 def default_password_callback(
     *,
     password_env: str | None = None,
+    username: str | None = None,
     prompt_password: bool = False,
 ) -> PasswordCallback:
-    """Resuelve respuestas PAM: env opcional, prompt en /dev/tty o cadena vacía."""
+    """Resuelve respuestas PAM: env por usuario, env global, prompt o cadena vacía."""
 
     def callback(auth_message_type: str, message: str) -> Optional[str]:
         if auth_message_type in ("info", "error"):
             return None
-        if password_env:
-            value = os.environ.get(password_env)
-            if value is not None:
-                return value
+        value = _password_from_env(password_env, username)
+        if value:
+            return value
         if prompt_password:
-            return _read_from_tty(auth_message_type, message)
+            return _read_password_interactive(auth_message_type, message)
+        if password_env:
+            hint = _password_env_hint(password_env, username)
+            raise GreetdIpcError(
+                f"Define {hint} en el launcher de greetd "
+                "(bajo greetd /dev/tty suele no ser escribible)."
+            )
         return ""
 
     return callback
 
 
-def _read_from_tty(auth_message_type: str, message: str) -> str:
+def _password_env_hint(password_env: str, username: str | None) -> str:
+    if username:
+        return f"{password_env}_{username.upper()} o {password_env}"
+    return password_env
+
+
+def _password_from_env(password_env: str | None, username: str | None) -> str:
+    if not password_env:
+        return ""
+    if username:
+        per_user = os.environ.get(f"{password_env}_{username.upper()}", "")
+        if per_user:
+            return per_user
+    return os.environ.get(password_env, "")
+
+
+def _read_password_interactive(auth_message_type: str, message: str) -> str:
+    """Lee contraseña desde TTY; prueba /dev/tty y /dev/console (greetd VT)."""
     prompt = message.strip() or "Contraseña PAM: "
+    last_exc: OSError | None = None
+    for device in ("/dev/tty", "/dev/console"):
+        try:
+            return _read_password_from_device(device, auth_message_type, prompt)
+        except OSError as exc:
+            last_exc = exc
+    raise GreetdIpcError(
+        "No se pudo pedir contraseña PAM de forma interactiva bajo greetd. "
+        f"Define FACE_LOGIN_PAM_PASSWORD en /opt/rp_face_login/bin/greetd-face-login. "
+        f"Detalle: {last_exc}"
+    )
+
+
+def _read_password_from_device(device: str, auth_message_type: str, prompt: str) -> str:
+    fd = os.open(device, os.O_RDWR | getattr(os, "O_CLOEXEC", 0))
     try:
-        with open("/dev/tty", "r", encoding="utf-8") as tty_in, open(
-            "/dev/tty", "w", encoding="utf-8"
-        ) as tty_out:
+        with os.fdopen(fd, "r+", encoding="utf-8", buffering=1, closefd=True) as tty:
             if auth_message_type == "secret":
                 import getpass
 
-                return getpass.getpass(prompt, stream=tty_in)
-            tty_out.write(f"{prompt}\n")
-            tty_out.flush()
-            return tty_in.readline().rstrip("\n")
-    except OSError as exc:
-        raise GreetdIpcError(f"No se pudo leer respuesta PAM desde /dev/tty: {exc}") from exc
+                tty.write(prompt)
+                tty.flush()
+                return getpass.getpass("", stream=tty)
+            tty.write(f"{prompt}\n")
+            tty.flush()
+            return tty.readline().rstrip("\n")
+    except OSError:
+        os.close(fd)
+        raise

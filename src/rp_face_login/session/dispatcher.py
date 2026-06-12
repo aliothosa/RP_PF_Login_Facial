@@ -135,6 +135,7 @@ class SessionDispatcher:
         cmd = self.command_argv_for(user)
         password_cb = default_password_callback(
             password_env=self.greetd_password_env,
+            username=user,
             prompt_password=self.greetd_prompt_password,
         )
         client = GreetdIpcClient(socket_env=self.greetd_socket_env)
